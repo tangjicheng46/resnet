@@ -5,6 +5,8 @@ from torch import nn
 from torch.utils.data import DataLoader
 import time
 
+torch.cuda.set_device(1)
+
 # Download training data from open datasets.
 training_data = datasets.CIFAR10(
     root="data",
@@ -21,7 +23,7 @@ test_data = datasets.CIFAR10(
     transform=torchvision.transforms.ToTensor(),
 )
 
-batch_size = 64
+batch_size = 8
 
 # Create data loaders.
 train_dataloader = DataLoader(training_data, batch_size=batch_size)
@@ -36,12 +38,12 @@ for X, y in test_dataloader:
 
 device = "cuda"
 
-model = torchvision.models.resnet50(num_classes=10)
+model = torchvision.models.resnet152(num_classes=10)
 
 model.to(device)
 
 loss_fn = nn.CrossEntropyLoss()
-optimizer = torch.optim.SGD(model.parameters(), lr=1e-4)
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
 def train(dataloader, model, loss_fn, optimizer):
     size = len(dataloader.dataset)
@@ -89,14 +91,14 @@ for t in range(epochs):
 print("Done!")
 
 model.to("cpu")
-torch.save(model, "resnet50.pt")
+torch.save(model, "resnet142.pt")
 # Export the model
 dummy_input = torch.randn(input_shape)
 torch.onnx.export(model,               # model being run
                     # model input (or a tuple for multiple inputs)
                     dummy_input,
                     # where to save the model (can be a file or file-like object)
-                    "resnet50.onnx",
+                    "resnet152.onnx",
                     export_params=True,        # store the trained parameter weights inside the model file
                     # opset_version=10,          # the ONNX version to export the model to
                     do_constant_folding=True,  # whether to execute constant folding for optimization

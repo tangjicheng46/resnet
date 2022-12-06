@@ -5,6 +5,8 @@ from torch import nn
 from torch.utils.data import DataLoader
 import time
 
+torch.cuda.set_device(1)
+
 # Download training data from open datasets.
 training_data = datasets.CIFAR10(
     root="data",
@@ -21,7 +23,7 @@ test_data = datasets.CIFAR10(
     transform=torchvision.transforms.ToTensor(),
 )
 
-batch_size = 64
+batch_size = 8
 
 # Create data loaders.
 train_dataloader = DataLoader(training_data, batch_size=batch_size)

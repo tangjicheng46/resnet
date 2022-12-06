@@ -4,8 +4,10 @@ from torchvision import datasets
 from torch import nn
 from torch.utils.data import DataLoader
 import time
+from torch.utils.tensorboard import SummaryWriter
+writer = SummaryWriter('runs/resnet50_cifar10')
 
-torch.cuda.set_device(1)
+torch.cuda.set_device(0)
 
 # Download training data from open datasets.
 training_data = datasets.CIFAR10(
@@ -23,7 +25,7 @@ test_data = datasets.CIFAR10(
     transform=torchvision.transforms.ToTensor(),
 )
 
-batch_size = 8
+batch_size = 64
 
 # Create data loaders.
 train_dataloader = DataLoader(training_data, batch_size=batch_size)
@@ -38,14 +40,25 @@ for X, y in test_dataloader:
 
 device = "cuda"
 
+def get_lr(optimizer):
+    for param_group in optimizer.param_groups:
+        return param_group['lr']
+
 model = torchvision.models.resnet50(num_classes=10)
 
 model.to(device)
-
+epochs = 100
 loss_fn = nn.CrossEntropyLoss()
-optimizer = torch.optim.SGD(model.parameters(), lr=1e-4)
 
-def train(dataloader, model, loss_fn, optimizer):
+lrs = []
+clip_value = 0.1
+max_lr = 0.01
+weight_decay = 1e-4
+optimizer = torch.optim.Adam(
+    model.parameters(), max_lr, weight_decay=weight_decay)
+sched = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr, epochs=epochs,
+                                            steps_per_epoch=len(train_dataloader))
+def train(dataloader, model, loss_fn, optimizer, t):
     size = len(dataloader.dataset)
     model.train()
     for batch, (X, y) in enumerate(dataloader):
@@ -57,17 +70,24 @@ def train(dataloader, model, loss_fn, optimizer):
         loss = loss_fn(pred, y)
 
         # Backpropagation
-        optimizer.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_value_(model.parameters(), clip_value)
         optimizer.step()
+        optimizer.zero_grad()
+
+        lrs.append(get_lr(optimizer))
+        sched.step()
 
         if batch % 100 == 0:
             loss, current = loss.item(), batch * len(X)
             cost_time = time.time() - start_time
             print(f"Train: \n loss: {loss:>7f}  [{current:>5d}/{size:>5d}] cost: {cost_time:>4f}")
+            writer.add_scalar("train_loss", loss,
+                              t * len(dataloader) + batch)
 
 
-def test(dataloader, model, loss_fn):
+
+def test(dataloader, model, loss_fn, t):
     size = len(dataloader.dataset)
     num_batches = len(dataloader)
     model.eval()
@@ -80,14 +100,19 @@ def test(dataloader, model, loss_fn):
             correct += (pred.argmax(1) == y).type(torch.float).sum().item()
     test_loss /= num_batches
     correct /= size
+    writer.add_scalar("test_acc", 100*correct, t)
     print(
         f"Test: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
 
-epochs = 1000
+
 for t in range(epochs):
     print(f"Epoch {t+1}\n-------------------------------")
-    train(train_dataloader, model, loss_fn, optimizer)
-    test(test_dataloader, model, loss_fn)
+    train(train_dataloader, model, loss_fn, optimizer, t)
+    test(test_dataloader, model, loss_fn, t)
+    # print("lrs:")
+    # for iter in lrs:
+    #     print(iter, sep=",")
+    # print("")
 print("Done!")
 
 model.to("cpu")

@@ -197,7 +197,56 @@ class MyResNet(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         return self._forward_impl(x)
 
-model = MyResNet(block=torchvision.models.resnet.Bottleneck, layers=[1,1,1,1], num_classes=10)
+class Cifar10Model(nn.Module):
+    def __init__(self, num_classes):
+        super().__init__()
+        # input (batch, 3, 32, 32)
+        self.conv1 = nn.Conv2d(3, 8, kernel_size=7, stride=2, padding=3, bias=False)
+        self.bn1 = nn.BatchNorm2d(8)
+        self.relu1 = nn.ReLU(inplace=True)
+
+        # (batch, 8, 16, 16)
+        self.conv2 = nn.Conv2d(8, 16, kernel_size=3, stride=2, padding=1)
+        self.bn2 = nn.BatchNorm2d(16)
+        self.relu2 = nn.ReLU(inplace=True)
+
+        # (batch, 16, 7, 7)
+        self.conv3 = nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1)
+        self.bn3 = nn.BatchNorm2d(32)
+        self.relu3 = nn.ReLU(inplace=True)
+        
+        # (batch, 32, 3, 3)
+        self.conv4 = nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1)
+        self.bn4 = nn.BatchNorm2d(64)
+        self.relu4 = nn.ReLU(inplace=True)
+        
+        # (batch, 64, 2, 2)
+        self.flat = nn.Flatten()
+        self.linear = nn.Linear(256, num_classes)
+        
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu1(x)
+        
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = self.relu2(x)
+        
+        x = self.conv3(x)
+        x = self.bn3(x)
+        x = self.relu3(x)
+        
+        x = self.conv4(x)
+        x = self.bn4(x)
+        x = self.relu4(x)
+        
+        x = self.flat(x)
+        x = self.linear(x)
+        return x
+
+# model = MyResNet(block=torchvision.models.resnet.BasicBlock, layers=[1,1,1,1], num_classes=10)
+model = Cifar10Model(10)
 model.apply(init_weight)
 
 model.to(device)
@@ -232,12 +281,12 @@ def train(dataloader, model, loss_fn, optimizer, t):
         lrs.append(get_lr(optimizer))
         sched.step()
 
-        if batch % 10 == 0:
-            loss, current = loss.item(), batch * len(X)
-            cost_time = time.time() - start_time
-            print(f"Train: \n loss: {loss:>7f}  [{current:>5d}/{size:>5d}] cost: {cost_time:>4f}")
-            writer.add_scalar("train_loss", loss,
-                              t * len(dataloader) + batch)
+        # if batch % 10 == 0:
+        #     loss, current = loss.item(), batch * len(X)
+        #     cost_time = time.time() - start_time
+        #     print(f"Train: \n loss: {loss:>7f}  [{current:>5d}/{size:>5d}] cost: {cost_time:>4f}")
+        #     writer.add_scalar("train_loss", loss,
+        #                       t * len(dataloader) + batch)
 
 
 
@@ -288,14 +337,14 @@ for t in range(epochs):
 print("Done!")
 
 model.to("cpu")
-torch.save(model, "resnet50.pt")
+torch.save(model, "resnet9.pt")
 # Export the model
 dummy_input = torch.randn(input_shape)
 torch.onnx.export(model,               # model being run
                     # model input (or a tuple for multiple inputs)
                     dummy_input,
                     # where to save the model (can be a file or file-like object)
-                    "resnet50.onnx",
+                    "resnet9.onnx",
                     export_params=True,        # store the trained parameter weights inside the model file
                     # opset_version=10,          # the ONNX version to export the model to
                     do_constant_folding=True,  # whether to execute constant folding for optimization
